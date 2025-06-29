@@ -1,0 +1,147 @@
+---
+title: "Projekt AWCJ - Politycy 2025"
+author: "Iga Bochniak"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r Sciezka, echo = FALSE}
+setwd("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT")
+```
+
+```{r Pakiety, echo = FALSE, message = FALSE, warning = FALSE}
+pacman::p_load(tidyverse, # ładowanie m.in. ggplot2, dplyr, forcats; tworzenie kodów z operatorem pipe %>% 
+               corrplot, # wykres korelacji (korelogram)
+               ggcorrplot, # wykres korelacji z ggplot
+               psych, # narzędzia statystyczne (testy, wiarygodność testów, analizy) 
+               EnvStats, # narzędzia statystyczne (skewness) 
+               laeken, # gini (do obliczenia statystyk opisowych) 
+               gridExtra, # łączenie wykresów
+               lattice, # wykresy kratowe
+               readxl, # wczytywanie danych z Excel     
+               RColorBrewer, # palety z kolorami
+               DescTools, # narzędzia statystyczne
+               car, # testy statystyczne, analiza reszt, wykrywanie outliers'ów 
+               vcd, # wizualizacja danych kategorycznych
+               reshape2, # przekształcanie formatu danych 
+               gplots, # nie wymaga konwersji danych za pomocą reshape2 jak ggplot2 
+               seriation, # ustalanie optymalnej kolejności elementów
+               BiocManager,
+               jaccard,
+               vegan, # funkcja vegdist
+               proxy,
+               tidyverse,
+               factoextra,
+               pheatmap,
+               plot.matrix,
+               png,
+               cluster,
+               dendextend,
+               showtext,
+               sysfonts,
+               tibble,
+               stringr
+               )
+```
+
+```{r Ustawienie czcionki, echo = FALSE}
+font_add_google("Lato", "lato")
+showtext_auto()
+theme_void(base_family = "Lato")
+```
+
+# Zbiór danych
+
+```{r Import danych}
+rawData <- read_excel("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/BAZA POLITYCY 2025.xlsx", )
+```
+
+
+```{r Zmiana na data frame}
+rawData <- data.frame(rawData[,-1]) # usunięcie pierwszej kolumny, bo R dodaje swoją
+```
+
+Zmienne jakościowe
+
+```{r Zmienne jakosciowe}
+rawData_jakosciowe <- rawData %>%
+  select(wyksztalcenie, plec) %>%
+  mutate(across(c(plec, wyksztalcenie), as.factor))
+```
+
+Zmienne ilościowe
+
+```{r Zmienne ilosciowe}
+rawData_ilosciowe <- rawData %>%
+  select(-c(plec, wyksztalcenie))
+```
+
+# Analiza wstępna
+
+## Statystyki opisowe
+
+```{r Statystyki opisowe, warning = FALSE, message = FALSE}
+result <- rawData_ilosciowe %>% 
+  summarise(zmienne = colnames(rawData_ilosciowe),
+            srednia = round((colMeans(rawData_ilosciowe)), 2),
+            odchylenie = round(apply(rawData_ilosciowe, 2, sd), 2),
+            skosnosc = round(apply(rawData_ilosciowe, 2, skewness), 2),
+            wspolczynnik_zmiennosci = round(odchylenie/srednia*100, 2))
+
+result
+```
+
+
+Histogram wieku
+
+```{r Histogram wieku}
+ggplot(rawData_ilosciowe, aes(x = wiek)) +
+    geom_histogram(fill = "#477cc6", bins = 20) +
+    labs(x = 'Wiek', y = 'Liczba wystąpień', title = 'Rozkład zmiennej wiek')
+```
+
+Histogram wieku w podziale na 3 grupy wiekowe
+
+```{r Histogram wieku w podziale na 3 grupy wiekowe}
+ggplot(rawData_ilosciowe, aes(x = cut(wiek,
+                                      breaks = c(-Inf, 17, 64, Inf),
+                                      labels = c("poniżej 18", "18–64", "65+")))) +
+    geom_bar(fill = "#477cc6") +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    labs(x = 'Wiek', y = 'Liczba wystąpień', title = 'Rozkład zmiennej wiek')
+```
+
+Histogram wykształcenia
+
+* podstawowe -- 1
+* zawodowe -- 2 
+* średnie -- 3
+* wyższe -- 4
+
+```{r Histogram wykształcenia}
+ggplot(rawData_jakosciowe, aes(x = wyksztalcenie)) +
+    geom_bar(fill = "#ed1c24") +
+    scale_x_discrete(labels = c("1" = "Podstawowe", "2" = "Zawodowe", "3" = "Średnie", "4" = "Wyższe")) +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    labs(x = 'Wykształcenie', y = 'Liczba wystąpień', title = 'Rozkład zmiennej wykształcenie')
+```
+
+Histogram płci
+
+* kobieta -- 1
+* mężczyzna -- 2
+
+```{r Histogram plci}
+ggplot(rawData_jakosciowe, aes(x = plec)) +
+    geom_bar(fill = "#feb905") +
+    scale_x_discrete(labels = c("1" = "Kobieta", "2" = "Mężczyzna")) +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    labs(x = 'Płeć', y = 'Liczba wystąpień', title = 'Rozkład zmiennej płeć')
+```
+
+
+
+## Analiza współzależności (czy dać ją do osobnego rozdziału?)
+
+
+

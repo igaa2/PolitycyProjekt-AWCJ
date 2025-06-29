@@ -1,0 +1,1013 @@
+---
+title: "Projekt AWCJ - Politycy 2025"
+author: "Iga Bochniak"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r Sciezka, echo = FALSE}
+setwd("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT")
+```
+
+```{r Pakiety, echo = FALSE, message = FALSE, warning = FALSE}
+pacman::p_load(tidyverse, # ładowanie m.in. ggplot2, dplyr, forcats; tworzenie kodów z operatorem pipe %>% 
+               corrplot, # wykres korelacji (korelogram)
+               ggcorrplot, # wykres korelacji z ggplot
+               psych, # narzędzia statystyczne (testy, wiarygodność testów, analizy) 
+               EnvStats, # narzędzia statystyczne (skewness) 
+               laeken, # gini (do obliczenia statystyk opisowych) 
+               gridExtra, # łączenie wykresów
+               lattice, # wykresy kratowe
+               readxl, # wczytywanie danych z Excel     
+               RColorBrewer, # palety z kolorami
+               DescTools, # narzędzia statystyczne
+               car, # testy statystyczne, analiza reszt, wykrywanie outliers'ów 
+               vcd, # wizualizacja danych kategorycznych
+               reshape2, # przekształcanie formatu danych 
+               gplots, # nie wymaga konwersji danych za pomocą reshape2 jak ggplot2 
+               seriation, # ustalanie optymalnej kolejności elementów
+               BiocManager,
+               jaccard,
+               vegan, # funkcja vegdist
+               proxy,
+               tidyverse,
+               factoextra,
+               pheatmap,
+               plot.matrix,
+               png,
+               cluster,
+               dendextend,
+               showtext,
+               sysfonts,
+               tibble,
+               stringr
+               )
+```
+
+```{r Ustawienie czcionki, echo = FALSE}
+font_add_google("Lato", "lato")
+showtext_auto()
+theme_void(base_family = "Lato")
+```
+
+# Zbiór danych
+
+```{r Import danych}
+rawData <- read_excel("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/BAZA POLITYCY 2025.xlsx", )
+```
+
+
+```{r Zmiana na data frame}
+rawData <- data.frame(rawData[,-1]) # usunięcie pierwszej kolumny, bo R dodaje swoją
+```
+
+Zmienne jakościowe
+
+```{r Zmienne jakosciowe}
+rawData_jakosciowe <- rawData %>%
+  select(wyksztalcenie, plec) %>%
+  mutate(across(c(plec, wyksztalcenie), as.factor))
+```
+
+Zmienne ilościowe
+
+```{r Zmienne ilosciowe}
+rawData_ilosciowe <- rawData %>%
+  select(-c(plec, wyksztalcenie))
+```
+
+# Analiza wstępna
+
+## Statystyki opisowe
+
+```{r Statystyki opisowe, warning = FALSE, message = FALSE}
+result <- rawData_ilosciowe %>% 
+  summarise(zmienne = colnames(rawData_ilosciowe),
+            srednia = round((colMeans(rawData_ilosciowe)), 2),
+            odchylenie = round(apply(rawData_ilosciowe, 2, sd), 2),
+            skosnosc = round(apply(rawData_ilosciowe, 2, skewness), 2),
+            wspolczynnik_zmiennosci = round(odchylenie/srednia*100, 2))
+
+result
+```
+
+
+Histogram wieku
+
+```{r Histogram wieku}
+ggplot(rawData_ilosciowe, aes(x = wiek)) +
+    geom_histogram(fill = "#477cc6", bins = 20) +
+    labs(x = 'Wiek', y = 'Liczba wystąpień', title = 'Rozkład zmiennej wiek')
+```
+
+Histogram wieku w podziale na 3 grupy wiekowe
+
+```{r Histogram wieku w podziale na 3 grupy wiekowe}
+ggplot(rawData_ilosciowe, aes(x = cut(wiek,
+                                      breaks = c(-Inf, 17, 64, Inf),
+                                      labels = c("poniżej 18", "18–64", "65+")))) +
+    geom_bar(fill = "#477cc6") +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    labs(x = 'Wiek', y = 'Liczba wystąpień', title = 'Rozkład zmiennej wiek')
+```
+
+Histogram wykształcenia
+
+* podstawowe -- 1
+* zawodowe -- 2 
+* średnie -- 3
+* wyższe -- 4
+
+```{r Histogram wykształcenia}
+ggplot(rawData_jakosciowe, aes(x = wyksztalcenie)) +
+    geom_bar(fill = "#ed1c24") +
+    scale_x_discrete(labels = c("1" = "Podstawowe", "2" = "Zawodowe", "3" = "Średnie", "4" = "Wyższe")) +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    labs(x = 'Wykształcenie', y = 'Liczba wystąpień', title = 'Rozkład zmiennej wykształcenie')
+```
+
+Histogram płci
+
+* kobieta -- 1
+* mężczyzna -- 2
+
+```{r Histogram plci}
+ggplot(rawData_jakosciowe, aes(x = plec)) +
+    geom_bar(fill = "#feb905") +
+    scale_x_discrete(labels = c("1" = "Kobieta", "2" = "Mężczyzna")) +
+    geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.5) +
+    labs(x = 'Płeć', y = 'Liczba wystąpień', title = 'Rozkład zmiennej płeć')
+```
+
+
+
+## Analiza współzależności (czy dać ją do osobnego rozdziału?)
+
+
+
+# Analiza rzetelności
+
+Tworzymy osobny podzbiór danych, w którym zmiennymi będą 24 pytania z drugiej części kwestionariusza.
+
+```{r Zbior z pytaniami}
+rawData_pytania <- rawData %>%
+  select(starts_with("X"))
+```
+
+## Kowariancje i korelacje
+
+Macierz kowariancji 
+
+```{r Macierz kowariancji rawData_pytania}
+cov_matrix_rawData_pytania <- round(cov(rawData_pytania), 2)
+#cov_matrix_rawData_pytania
+```
+
+Macierz korelacji
+
+```{r Macierz korelacji rawData_pytania}
+cor_matrix_rawData_pytania <- round(cor(rawData_pytania), 2)
+#cor_matrix_rawData_pytania
+```
+
+Korelogram
+
+```{r Korelogram rawData_pytania}
+ggcorrplot(
+  corr = cor_matrix_rawData_pytania,
+  method = "square",
+  type = "upper",
+  ggtheme = ggplot2::theme_gray,
+  lab = TRUE,
+  digits = 1
+)
+
+ggsave(
+  filename = "korelogram_rawData_pytania.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika",
+  limitsize = FALSE,
+  width = 16.604,
+  height = 8.271,
+  dpi = 400,
+  bg = "transparent"
+)
+```
+
+**W większości słabe korelacje, czy to źle??**
+
+## Test alfa Cronbacha -- różne sposoby obliczenia surowego współczynnika alfa Cronbacha
+
+### Sposób pierwszy
+
+Suma wariancji z macierzy kowariancji
+
+```{r Suma wariancji z macierzy kowariancji}
+svar <- sum(diag(cov_matrix_rawData_pytania))
+svar
+```
+Wariancja policzona z sum uzyskanych z wierszy (1--wiersze)
+
+```{r Suma policzona po wierszach}
+spw <- apply(rawData_pytania, 1, sum)
+#spw
+```
+
+```{r Wariancja z sumy po wierszach}
+var(spw)
+```
+```{r Liczba pytan}
+k = 24 #liczba pytań
+```
+
+```{r Alfa Cronbach sposob 1}
+alfa <- (k/(k-1))*(1-(svar)/var(spw))
+alfa
+```
+
+*W naszych projektach od 0.7 powinno być* -- **JEST 0.62: CZY TO ŹLE??**
+
+### Sposób drugi
+
+```{r Alfa Cronbach sposob 2}
+CronbachAlpha(rawData_pytania)
+```
+### Sposób trzeci (bardziej rozbudowane omówienie)
+
+```{r Alfa Cronbach sposob 3, warning = FALSE, message = FALSE}
+alpha(rawData_pytania)
+```
+
+Wyniki:
+
+* raw_alpha = 0.6222536 (surowy współczynnik alfa Cronbacha)
+* std.alpha = 0.6367148 (standaryzowany alfa Cronbach -- wartość bardzo zbliżona do surowej alfy, gdy wszystkie zmienne są na tej samej skali)
+* G6(smc) = 0.7403259 (Lambda 6 Guttmana)
+* average_r = 0.06805738 (średnia korelacja między zmiennymi; wskazuje, jak silnie zmienne są ze sobą powiązane -- im wyższa, tym bardziej jednolity test)
+* S/N = 1.752658
+* mean = 4.159066 (średnia wartość odpowiedzi w skali testu)
+* sd = 0.5273359 (odchylenie standardowe wyników testu)
+* median_r = 0.06611555 (mediana korelacji między pytaniami)
+
+---
+
+Interpretacja S/N:
+
+* S/N < 1 -- zła rzetelność -- test jest bardzo niestabilny
+* S/N $\approx$ 1-2 -- słaba rzetelność -- test zawiera dużo szumu, ale może być użyteczny w niektórych przypadkach
+* S/N $\approx$ 3-5 -- umiarkowana, dobra rzetelność -- sensowna ilość informacji pochodzi z rzeczywistego konstruktu
+* S/N > 5 -- bardzo dobra rzetelność -- większość wariancji jest rzeczywistym sygnałem, a nie szumem
+* S/N > 10 -- bardzo wysoka rzetelność, duża liczba sinie skorelowanych zmiennych
+
+---
+
+Dodatkowo:
+
+Feldt i Duhachek to dwie różne metody szacowania przedziału ufności dla alfa Cronbacha. Prawdziwa wartość alfy z 95% pewnością znajduje się w podanych przedziałach.
+
+Metoda Jamesa Feldta -- duże próby, założenie homogeniczności wariancji, oparta na rozkładzie F.
+
+Metoda Megan Duhachek -- raczej małe próby, brak założeń homogeniczności wariancji, oparta na bootstrappingu.
+
+Cronbach dobry do zbiorów, które mają jeden konstrukt.
+
+---
+
+## Czy Alfa Cronbach jest odpowiedni do naszych danych?
+
+Dane w dwóch kolumnach (tzw. długie dane)
+
+```{r Dlugie dane z rawData_pytania}
+rawData_pytania_long <- stack(rawData_pytania)
+```
+
+Test na homogeniczność wariancji (LeveneTest)
+
+* H0: wariancje w grupach są równe (homogeniczne)
+* HA: wariancje w grupach są różne (heterogeniczne)
+
+```{r Test na homogenicznosc dla rawData_pytania}
+LeveneTest(values ~ ind, data = rawData_pytania_long)
+```
+
+Wyniki:
+
+p--value = 2.2e-16
+
+Wniosek:
+
+Odrzucamy hipotezę zerową. Wariancje nie są homogeniczne, czyli różnią się istotnie między kolumnami.
+
+*W projekcie musimy podać hipotezy, p-value itp.*
+
+[Reliability if an item is dropped -- jak zmieni się rzetelność testu (alfa Cronbacha), gdy usuniemy którąś ze zmiennych (np. gdy wyrzucimy x3, to Cronbach wzrośnie do 0.87, czyli x3 jest mało ważny).] -- nie wiem do której części kodu to było na zajęciach opisane
+
+```{r Lambdy i beta dla rawData_pytania, warning = FALSE, message = FALSE}
+splitHalf(rawData_pytania)
+```
+
+Gdyby beta (minimum) była wysoka to oznaczałoby, że jest jeden konstrukt (wszystkie są skorelowane) -- wtedy Cronbach. 
+
+U nas `Minimum split half reliability  (beta) = 0.53` -- najniższa korelacja między połówkami zbiorów. **(to duża czy mała?)**
+
+Połówki to mogą być 3 i 5, 2 i 6 a nie tylko równe połówki. 
+
+---
+
+Interpretacje ogólne:
+
+**Lambda 3** to znany **test alfa Cronbacha**, a **lambda 4** to **współczynnik podziału połówkowego Guttmana**.
+
+**Lambda 1** jest miarą pomocniczą. Stanowi bazę do obliczania pozostałych lambd. Sama w sobie nie jest stosowana do szacowania rzetelności skali, gdyż znacząco zaniża rzeczywistą wartość rzetelności.
+
+**Lambda 2**, w porównaniu z testem alfa Cronbacha, lepiej estymuje dolną granicę rzetelności.
+
+Lambda 5 i 6 stosowanie są w szczególnych przypadkach. 
+
+**Lambda 5** przyjmuje wyższą wartość (i jednocześnie uznaje się, że lepiej szacuje rzetelność) wtedy, gdy jedno ze stwierdzeń ma szczególnie wysokie wartości kowariancji ze wszystkimi innymi stwierdzeniami, podczas gdy pomiędzy pozostałymi stwierdzeniami wartości kowariancji są niskie.
+
+**Lambda 6** natomiast rekomendowana jest wtedy, gdy korelacje między poszczególnymi stwierdzeniami są niskie w porównaniu do kwadratów korelacji wielokrotnej (wartości współczynnika R-kwadrat).
+
+---
+
+Korelacje wielorakie
+
+```{r Korelacje wielorakie - puste wektory na wyniki}
+# Tworzenie pustego wektora na wyniki
+korwielor <- numeric(ncol(rawData_pytania))
+kor_kwadr <- numeric(ncol(rawData_pytania))
+```
+
+```{r Korelacje wielorakie - pętla}
+# Pętla dla każdej zmiennej jako zmiennej zależnej
+for (i in 1:ncol(rawData_pytania)) {
+  zalezna_var <- rawData_pytania[ ,i]  # zmienna zależna
+  # Macierz zmiennych niezależnych (wszystkie oprócz jednej)
+  niezalezna_vars <- rawData_pytania[ ,-i]
+  # Dopasowanie modelu regresji wielorakiej
+  model <- lm(zalezna_var ~ ., data = as.data.frame(niezalezna_vars))
+  # Obliczenie wspołczynnika korelacji wielokrotnej R
+  R_kwadr <- summary(model)$r.squared
+  korwielor[i] <- sqrt(R_kwadr)
+  kor_kwadr[i] <- R_kwadr
+}
+```
+
+```{r Korelacje wielorakie - nazwanie wyników zgodnie ze zmiennymi}
+# Nazwanie wyników zgodnie ze zmiennymi
+names(korwielor) <- colnames(rawData_pytania)
+names(kor_kwadr) <- colnames(rawData_pytania)
+```
+
+```{r Korelacje wielorakie}
+korwielor
+```
+
+```{r Kwadraty korelacji wielorakich}
+kor_kwadr
+```
+
+### Metoda Guttmana
+
+```{r Guttman, message = FALSE, warning = FALSE}
+guttman(rawData_pytania)
+```
+
+---
+
+Interpretacje ogólne:
+
+Jeśli wszystkie wartości są podobne, np. 0.85 -- 0.9, tzn. że test ma stabilną rzetelność. 
+
+W metodzie wprowadza się różne założenia: 
+
+* mu0 -- konserwatywna ocena rzetelności -- minimalna wariancja wspólna pomiędzy cechami, pytania mierzą wówczas różne konstrukty
+* mu1 -- podejście realistyczne -- częściowo uwzględnia błąd pomiaru
+* mu2 -- ograniczony wpływ błędów pomiarowych, założenie liniowości między cechami, korelacje wynikają z głównego konstruktu, a nie z błędu pomiarowego
+* mu3 -- maksymalna możliwa rzetelność -- idealny model bez błędów pomiarowych
+
+Jeżeli między mu0 a mu3 jest duża różnica, to to być może znajdują się błędy pomiarowe i inne.
+
+---
+
+*Tę metodę można sobie podarować w projekcie (?)*
+
+### Współczynnik omega McDonalda
+
+Współczynnik omega McDonalda ($\omega$) -- miara wewnętrznej spójności.
+
+```{r Omega McDonald}
+omega_result <- omega(rawData_pytania, fm = "ml", plot = FALSE)
+omega_result
+```
+
+### Metoda połówkowa
+
+Sumy osobno dla każdego obiektu
+
+```{r Sumy dla każdego obiektu z rawData_pytania}
+rawData_pytania_sums <- rowSums(rawData_pytania)
+#rawData_pytania_sums
+```
+
+```{r Wariancja z sum dla każdego obiektu z rawData_pytania}
+vartotal_rawData_pytania_sums <- var(rawData_pytania_sums)
+#vartotal_rawData_pytania_sums
+```
+
+---
+
+**Podział pierwszy na połówki -- zgodnie z kolejnością występowania**
+
+```{r Podzial pierwszy na polowki - kolejnosc wystepowania}
+part1_kolejnosc_wystepowania <- rawData_pytania %>%
+  select(X1:X12)
+part2_kolejnosc_wystepowania <- rawData_pytania %>%
+  select(X13:X24)
+```
+
+Pierwsza połówka
+
+```{r Pierwsza polowka - kolejnosc wystepowania, message = FALSE, warning = FALSE}
+part1_kolejnosc_wystepowania_sums <- rowSums(part1_kolejnosc_wystepowania)
+
+mean1_sum_kolejnosc_wystepowania <- mean(part1_kolejnosc_wystepowania_sums)
+sum1_value_kolejnosc_wystepowania <- sum(part1_kolejnosc_wystepowania_sums)
+sd1_sum_kolejnosc_wystepowania <- sd(part1_kolejnosc_wystepowania_sums)
+var1_sum_kolejnosc_wystepowania <- Var(part1_kolejnosc_wystepowania_sums)
+alpha1_kolejnosc_wystepowania <- alpha(part1_kolejnosc_wystepowania)
+
+results1_kolejnosc_wystepowania <- data.frame(
+  Statystyka = c("Średnia", "Suma", "Odchylenie standardowe", "Wariancja", "Alfa Cronbach"),
+  Wynik = c(mean1_sum_kolejnosc_wystepowania, 
+            sum1_value_kolejnosc_wystepowania, 
+            sd1_sum_kolejnosc_wystepowania, 
+            var1_sum_kolejnosc_wystepowania, 
+            alpha1_kolejnosc_wystepowania$total$raw_alpha)
+)
+
+print(results1_kolejnosc_wystepowania)
+```
+
+Druga połówka
+
+```{r Druga polowka - kolejnosc wystepowania, message = FALSE, warning = FALSE}
+part2_kolejnosc_wystepowania_sums <- rowSums(part2_kolejnosc_wystepowania)
+
+mean2_sum_kolejnosc_wystepowania <- mean(part2_kolejnosc_wystepowania_sums)
+sum2_value_kolejnosc_wystepowania <- sum(part2_kolejnosc_wystepowania_sums)
+sd2_sum_kolejnosc_wystepowania <- sd(part2_kolejnosc_wystepowania_sums)
+var2_sum_kolejnosc_wystepowania <- Var(part2_kolejnosc_wystepowania_sums)
+alpha2_kolejnosc_wystepowania <- alpha(part2_kolejnosc_wystepowania)
+
+results2_kolejnosc_wystepowania <- data.frame(
+  Statystyka = c("Średnia", "Suma", "Odchylenie standardowe", "Wariancja", "Alfa Cronbach"),
+  Wynik = c(mean2_sum_kolejnosc_wystepowania,
+            sum2_value_kolejnosc_wystepowania,
+            sd2_sum_kolejnosc_wystepowania,
+            var2_sum_kolejnosc_wystepowania,
+            alpha2_kolejnosc_wystepowania$total$raw_alpha)
+)
+
+print(results2_kolejnosc_wystepowania)
+```
+
+Wariancja dla pierwszej połówki jest większa niż dla drugiej, czyli odpowiedzi są bardziej rozproszone. Można w projekcie np. zaprezentować to na boxplocie.
+
+Pokazać w pracy te dwie tablice + wniosek.
+
+Korelacja między pierwszą i drugą połówką (korelacja połówkowa)
+
+```{r Korelacja polowkowa -- kolejnosc wystepowania}
+cor_half_kolejnosc_wystepowania <- cor(part1_kolejnosc_wystepowania_sums, part2_kolejnosc_wystepowania_sums)
+cat("Korelacja między pierwszą i drugą połówką (podział ze względu na kolejność występowania): ", cor_half_kolejnosc_wystepowania)
+```
+
+---
+
+Rzetelność połówkowa Spearmana -- Browna
+
+Interpretacja ogólna: 
+
+Wartość bliska 1 wskazuje na wysoką rzetelność testu, co oznacza, że pytania w teście są spójne i dobrze mierzą tę samą cechę.
+
+```{r Rzetelnosc polowkowa Spearmana-Browna - kolejnosc wystepowania}
+r_sb_kolejnosc_wystepowania <- (2 * cor_half_kolejnosc_wystepowania) / (1 + cor_half_kolejnosc_wystepowania)
+cat("Rzetelność połówkowa Spearmana-Browna (podział ze względu na kolejność występowania): ", r_sb_kolejnosc_wystepowania)
+```
+
+Wynik: wartość jest daleka od 1
+
+---
+
+Rzetelność połówkowa Guttmana:
+
+Interpretacja ogólna:
+
+Jeśli wysoka spójność, to narzędzie bada problem podobnie, konstrukt jest oceniany zbieżnie.
+
+```{r Rzetelnosc polowkowa Guttmana - kolejnosc wystepowania}
+r_guttman_kolejnosc_wystepowania <- (2 * (vartotal_rawData_pytania_sums - var1_sum_kolejnosc_wystepowania 
+                   - var2_sum_kolejnosc_wystepowania))/vartotal_rawData_pytania_sums
+cat("Rzetelność połówkowa Guttmana (podział ze względu na kolejność występowania): ", r_guttman_kolejnosc_wystepowania)
+```
+
+Wykres gęstości dla obu połówek (kolejność występowania)
+
+```{r Wykres gestosci dla obu polowek -- kolejnosc wystepowania}
+ggplot() +
+  geom_density(aes(x = part1_kolejnosc_wystepowania_sums), fill = "pink", alpha = 0.6) +
+  geom_density(aes(x = part2_kolejnosc_wystepowania_sums), fill = "orange", alpha = 0.6) +
+  labs(title = "Wykres gęstości wyników z obu połówek testu (podział ze względu na kolejność występowania)",
+       x = "Suma wyników", y = "Gęstość") +
+  theme_minimal()
+
+ggsave(
+  filename = "wykes_gestosci_obie_polowki_kolejnosc_wystepowania.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika",
+  limitsize = FALSE,
+  width = 16.604,
+  height = 8.271,
+  dpi = 400,
+  bg = "transparent"
+)
+```
+
+W pracy minimum 3 takie wykresy (nawet ze 4 -- 4 podziały na podzbiory).
+
+---
+
+**Podział drugi na połówki -- parzyste vs nieparzyste**
+
+```{r Podzial drugi na polowki - parzyste vs nieparzyste}
+part1_parzyste <- rawData_pytania %>%
+  select(matches("X[0-9]*[02468]$"))
+part2_nieparzyste <- rawData_pytania %>%
+  select(matches("X[0-9]*[13579]$"))
+```
+
+Pierwsza połówka
+
+```{r Pierwsza polowka - parzyste, message = FALSE, warning = FALSE}
+part1_parzyste_sums <- rowSums(part1_parzyste)
+
+mean1_sum_parzyste <- mean(part1_parzyste_sums)
+sum1_value_parzyste <- sum(part1_parzyste_sums)
+sd1_sum_parzyste <- sd(part1_parzyste_sums)
+var1_sum_parzyste <- Var(part1_parzyste_sums)
+alpha1_parzyste <- alpha(part1_parzyste)
+
+results1_parzyste <- data.frame(
+  Statystyka = c("Średnia", "Suma", "Odchylenie standardowe", "Wariancja", "Alfa Cronbach"),
+  Wynik = c(mean1_sum_parzyste, 
+            sum1_value_parzyste, 
+            sd1_sum_parzyste, 
+            var1_sum_parzyste, 
+            alpha1_parzyste$total$raw_alpha)
+)
+
+print(results1_parzyste)
+```
+
+Druga połówka
+
+```{r Druga polowka - nieparzyste, message = FALSE, warning = FALSE}
+part2_nieparzyste_sums <- rowSums(part2_nieparzyste)
+
+mean2_sum_nieparzyste <- mean(part2_nieparzyste_sums)
+sum2_value_nieparzyste <- sum(part2_nieparzyste_sums)
+sd2_sum_nieparzyste <- sd(part2_nieparzyste_sums)
+var2_sum_nieparzyste <- Var(part2_nieparzyste_sums)
+alpha2_nieparzyste <- alpha(part2_nieparzyste)
+
+results2_nieparzyste <- data.frame(
+  Statystyka = c("Średnia", "Suma", "Odchylenie standardowe", "Wariancja", "Alfa Cronbach"),
+  Wynik = c(mean2_sum_nieparzyste,
+            sum2_value_nieparzyste,
+            sd2_sum_nieparzyste,
+            var2_sum_nieparzyste,
+            alpha2_nieparzyste$total$raw_alpha)
+)
+
+print(results2_nieparzyste)
+```
+
+Wariancja dla pierwszej połówki jest większa niż dla drugiej, czyli odpowiedzi są bardziej rozproszone. Można w projekcie np. zaprezentować to na boxplocie.
+
+Pokazać w pracy te dwie tablice + wniosek.
+
+Korelacja między pierwszą i drugą połówką (korelacja połówkowa)
+
+```{r Korelacja polowkowa -- parzyste vs nieparzyste}
+cor_half_par_vs_npar <- cor(part1_parzyste_sums, part2_nieparzyste_sums)
+cat("Korelacja między pierwszą i drugą połówką (podział ze względu na kolejność występowania): ", cor_half_par_vs_npar)
+```
+
+---
+
+Rzetelność połówkowa Spearmana -- Browna
+
+Interpretacja ogólna: 
+
+Wartość bliska 1 wskazuje na wysoką rzetelność testu, co oznacza, że pytania w teście są spójne i dobrze mierzą tę samą cechę.
+
+```{r Rzetelnosc polowkowa Spearmana-Browna - parzyste vs nieparzyste}
+r_sb_par_vs_npar <- (2 * cor_half_par_vs_npar) / (1 + cor_half_par_vs_npar)
+cat("Rzetelność połówkowa Spearmana-Browna (podział na parzyste i nieparzyste): ", r_sb_par_vs_npar)
+```
+
+Wynik: 
+
+---
+
+Rzetelność połówkowa Guttmana:
+
+Interpretacja ogólna:
+
+Jeśli wysoka spójność, to narzędzie bada problem podobnie, konstrukt jest oceniany zbieżnie.
+
+```{r Rzetelnosc polowkowa Guttmana - parzyste vs nieparzyste}
+r_guttman_par_vs_npar <- (2 * (vartotal_rawData_pytania_sums - var1_sum_parzyste 
+                   - var2_sum_nieparzyste))/vartotal_rawData_pytania_sums
+cat("Rzetelność połówkowa Guttmana (podział na parzyste i nieparzyste): ", r_guttman_par_vs_npar)
+```
+
+Wykres gęstości dla obu połówek (kolejność występowania)
+
+```{r Wykres gestosci dla obu polowek -- parzyste vs nieparzyste}
+ggplot() +
+  geom_density(aes(x = part1_parzyste_sums), fill = "pink", alpha = 0.6) +
+  geom_density(aes(x = part2_nieparzyste_sums), fill = "orange", alpha = 0.6) +
+  labs(title = "Wykres gęstości wyników z obu połówek testu (podział na parzyste i nieparzyste)",
+       x = "Suma wyników", y = "Gęstość") +
+  theme_minimal()
+
+ggsave(
+  filename = "wykes_gestosci_obie_polowki_parzyste_vs_nieparzyste.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika",
+  limitsize = FALSE,
+  width = 16.604,
+  height = 8.271,
+  dpi = 400,
+  bg = "transparent"
+)
+```
+
+# Analiza skupień
+
+na razie tylko przekopiowałam kod ale niezbyt wiem jakie dane
+
+```{r}
+jednostki <- Politycy[,1]
+```
+
+```{r}
+jednostki
+```
+
+```{r}
+df <- Politycy[,-1]
+```
+
+```{r}
+df
+```
+
+```{r}
+row.names(df) <- jednostki
+```
+
+# Odległość Jaccarda
+
+```{r Odleglosc Jaccarda v1}
+vegdist(df, method = "jaccard")
+```
+
+Najmniejszą odległość między sobą mają Hołownia i Trzaskowski.
+
+```{r Najmniejsza odleglosc}
+min(vegdist(df, method = "jaccard"))
+```
+
+Największą odległość między sobą mają Lubnauer i Duda.
+
+```{r Najwieksza odleglosc}
+max(vegdist(df, method = "jaccard"))
+```
+
+---
+
+```{r Odleglosc Jaccarda v2}
+Jaccard_odl1 <- vegdist(df, method = "jaccard")
+Jaccard_odl1 <- as.matrix(Jaccard_odl1) [1:9, 1:9]
+Jaccard_odl1
+Jaccard_odl1 <- round((Jaccard_odl1), digits = 3)
+Jaccard_odl1
+```
+
+Pokazać macierz w projekcie i opisać.
+
+Współczynnik podobieństwa Jaccarda
+
+```{r Wspolczynnik podobienstwa Jaccarda}
+Jaccard_podob1 <- 1 - Jaccard_odl1
+Jaccard_podob1
+```
+
+Tej macierzy (chyba) niekoniecznie trzeba do projektu.
+
+## Wizualizacja macierzy odległości Jaccarda
+
+Inny sposób obliczania odległości Jaccarda
+
+```{r Odleglosc Jaccarda v3}
+Jaccard_odl <- get_dist(df, method = "binary", stand = FALSE) # stand = standaryzacja
+Jaccard_odl
+Jaccard_podob <- 1 - Jaccard_odl
+```
+
+```{r}
+fviz_dist(Jaccard_odl) # rysuje wykres dla powyższej funkcji (get_dist)
+fviz_dist(Jaccard_odl, order = FALSE)
+fviz_dist(Jaccard_odl, order = FALSE,
+          gradient = list(low = "seashell", mid = "pink", high = "red"))
+```
+
+Lepsza jest wizualizacja pierwsza, bo więcej widać. Na drugiej nic nie widać.
+
+*kod ze zdjęć do przepisania*
+
+```{r}
+pheatmap(Jaccard_odl1, cluster_rows = FALSE, cluster_cols = FALSE,
+         main = "Macierz odległości Jaccarda",
+         color = colorRampPalette(c("white", "blue"))(100)) # 100 - gradient
+```
+
+Co różni tę paletę od poprzednich? 
+
+Jest dobrze przekątna zaznaczona.
+
+* Macierz kolejna
+
+```{r}
+par(mar = c(5, 10, 3, 7)) # marginesy wokół wykresu
+
+plot(Jaccard_odl1, 
+     digits = 2, 
+     text.cell = list(cex = 0.8),
+     las = 2,
+     xlab = "",
+     ylab = "",
+     main = "",
+     cex.axis = 0.8)
+
+plot(Jaccard_odl1, 
+     col = rainbow, 
+     las = 2,
+     xlab = "",
+     ylab = "",
+     main = "",
+     cex.axis = 0.8)
+
+plot(Jaccard_odl1, 
+     col = c("red", "green"),
+     breaks = c(0, 0.5, 1),
+     las = 2,
+     xlab = "",
+     ylab = "",
+     main = "",
+     cex.axis = 0.8)
+
+plot(Jaccard_odl1, 
+     col = c("pink", "orange", "magenta", "red"),
+     breaks = c(0, 0.25, 0.5, 1),
+     las = 2,
+     xlab = "",
+     ylab = "",
+     main = "",
+     cex.axis = 0.8)
+
+#jeszcze jeden do przepisania
+
+par(mar = c(0, 0, 0, 0))
+```
+
+# Współczynnik podobieństwa Sokala-Michenera
+
+```{r}
+SM_podob <- simil(df,
+                  y = NULL,
+                  method = NULL,
+                  diag = FALSE,
+                  upper = FALSE,
+                  pairwise = FALSE, # porównuje tylko kompletne przypadki
+                  by_rows = TRUE, # podobieństwo między wierszami
+                  convert_distances = TRUE, # jeśli metoda zwraca odległość, zamienia ją na podobieństwo
+                  auto_convert_data_frames = TRUE)
+```
+
+dopisz
+
+Do projektu trzeba samemu stworzyć macierz odległości i porównać z Jaccardem
+
+# Grupowanie - odległość Jaccarda
+
+```{r}
+par(mar = c(5, 5, 5, 5))
+```
+
+```{r}
+odl <- dist(df, method = "Jaccard") # gdyby nie zadziałało, to trzeba wstawić binary
+```
+
+```{r Dendrogram dla Jaccarda}
+dendJ <- hclust(odl, method = "complete")
+```
+
+```{r}
+dendJ$height
+```
+
+Wyliczymy różnice między wysokościami i szukamy największej zmiany.
+
+```{r}
+różnice <- diff(dendJ$height)
+```
+
+```{r}
+plot(różnice,
+     type = "h",
+     main = "Różnice między kolejnymi wysokościami",
+     xlab = "Numer połączenia",
+     ylab = "Różnica wysokości")
+# zaznacz najwyższą różnicę na czerwono
+max_idx <- which.max(różnice)
+segments(x0 = max_idx,
+         y0 = 0,
+         x1 = max_idx,
+         y1 = różnice[max_idx],
+         col = "red",
+         lwd = 2)
+```
+
+Więc wybieramy do dalszej analizy k = 3.
+
+```{r}
+plot(dendJ,
+     main = "",
+     xlab = "Politycy",
+     ylab = "Poziom wiązania",
+     col = "black",
+     cex = 0.8,
+     ylim = c(0, max(dendJ$height)))
+```
+
+```{r}
+grupy <- cutree(dendJ, 
+                k = 3)
+```
+
+```{r}
+rect.hclust(dendJ, 
+            k = 3,
+            border = c("violetred2", "navy", "tomato"))
+par(mar = c(0, 0, 0, 0))
+```
+
+Powtórzyć to na Sokalu (niech się nie różnią metodą).
+
+# Zbiór danych Gower
+
+```{r Import danych}
+Gower <- read_excel("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/03. Analiza skupień/Gower.xlsx")
+```
+
+W projekcie trzeba sobie wymyślić temat i przygotować dane tak, żeby już nie były same 1 i 0, tylko też cechy jakościowe. Mamy mieć o jedną cechę mniej niż polityków (czyli 8 -- chociaż ja się zastanawiam, bo 9-ty to idealny, to chyba go nie scharakteryzujemy?).
+
+```{r}
+Gower
+```
+
+```{r}
+Gower <- data.frame(Gower)
+```
+
+```{r}
+str(Gower)
+```
+
+```{r}
+jednostki <- Gower[,1]
+```
+
+```{r}
+jednostki
+```
+
+```{r}
+df1 <- Gower[,-1]
+```
+
+```{r}
+df1
+```
+
+```{r}
+row.names(df1) <- jednostki
+```
+
+Excel importuje wszystko jako niefaktory, trzeba zamienić.
+
+```{r}
+df1$płeć <- factor(x = df1$płeć, levels = c("K", "M"))
+df1$wyksz <- factor(x = df1$wyksz, levels = c("S", "W"))
+df1$ocena <- factor(x = df1$ocena, levels = c("BW", "W", "N"))
+df1$dodatki <- factor(x = df1$dodatki, levels = c("T", "N"))
+df1$palenie <- factor(x = df1$palenie, levels = c("T", "N"))
+```
+
+```{r}
+str(Gower)
+```
+
+# Współczynnik Gowera
+
+Liczymy odległość
+
+```{r}
+daisy(df1, metric = c("gower"))
+```
+
+```{r}
+Gower_odl <- daisy(df1, metric = c("gower"))
+Gower_odl
+Gower_odl <- as.matrix(Gower_odl) [1:5, 1:5]
+Gower_odl <- round((Gower_odl), digits = 3)
+Gower_odl
+```
+Wskaźnik podobieństwa Gowera
+
+```{r}
+Gower_podob <- 1 - Gower_odl
+Gower_podob <- round((Gower_podob), digits = 3)
+Gower_podob
+```
+
+*odtąd sama robiłam -- mam na zdjęciach oficjalną wersję*
+
+```{r}
+pheatmap(Gower_odl, cluster_rows = FALSE, cluster_cols = FALSE,
+         main = "Macierz odległości Gowera",
+         color = colorRampPalette(c("white", "blue"))(100)) # 100 - gradient
+```
+
+# Grupowanie - odległość Gowera
+
+```{r}
+par(mar = c(5, 5, 5, 5))
+```
+
+```{r}
+odlG <- dist(df1, method = "Gower")
+```
+
+```{r Dendrogram dla Jaccarda}
+dendG <- hclust(odlG, method = "complete")
+```
+
+```{r}
+dendG$height
+```
+
+Wyliczymy różnice między wysokościami i szukamy największej zmiany.
+
+```{r}
+różniceG <- diff(dendG$height)
+```
+
+```{r}
+plot(różniceG,
+     type = "h",
+     main = "Różnice między kolejnymi wysokościami",
+     xlab = "Numer połączenia",
+     ylab = "Różnica wysokości")
+# zaznacz najwyższą różnicę na czerwono
+max_idx_G <- which.max(różniceG)
+segments(x0 = max_idx_G,
+         y0 = 0,
+         x1 = max_idx_G,
+         y1 = różniceG[max_idx_G],
+         col = "red",
+         lwd = 2)
+```
+
+Więc wybieramy do dalszej analizy k = 3.
+
+```{r}
+plot(dendG,
+     main = "",
+     xlab = "Politycy",
+     ylab = "Poziom wiązania",
+     col = "black",
+     cex = 0.8,
+     ylim = c(0, max(dendG$height)))
+```

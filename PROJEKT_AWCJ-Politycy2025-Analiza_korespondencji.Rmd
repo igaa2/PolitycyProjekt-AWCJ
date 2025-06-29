@@ -1,0 +1,501 @@
+---
+title: "Projekt AWCJ - Politycy 2025"
+author: "Iga Bochniak"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r Sciezka, echo = FALSE}
+setwd("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT")
+```
+
+```{r Pakiety, echo = FALSE, message = FALSE, warning = FALSE}
+pacman::p_load(tidyverse, # ładowanie m.in. ggplot2, dplyr, forcats; tworzenie kodów z operatorem pipe %>% 
+               corrplot, # wykres korelacji (korelogram)
+               ggcorrplot, # wykres korelacji z ggplot
+               psych, # narzędzia statystyczne (testy, wiarygodność testów, analizy) 
+               EnvStats, # narzędzia statystyczne (skewness) 
+               laeken, # gini (do obliczenia statystyk opisowych) 
+               gridExtra, # łączenie wykresów
+               lattice, # wykresy kratowe
+               readxl, # wczytywanie danych z Excel     
+               RColorBrewer, # palety z kolorami
+               DescTools, # narzędzia statystyczne
+               car, # testy statystyczne, analiza reszt, wykrywanie outliers'ów 
+               vcd, # wizualizacja danych kategorycznych
+               reshape2, # przekształcanie formatu danych 
+               gplots, # nie wymaga konwersji danych za pomocą reshape2 jak ggplot2 
+               seriation, # ustalanie optymalnej kolejności elementów
+               BiocManager,
+               jaccard,
+               vegan, # funkcja vegdist
+               proxy,
+               tidyverse,
+               factoextra,
+               pheatmap,
+               plot.matrix,
+               png,
+               cluster,
+               dendextend,
+               showtext,
+               sysfonts,
+               tibble,
+               stringr,
+               ca,
+               writexl,
+               tibble,
+               ggpubr,
+               gplots
+               )
+```
+
+```{r Ustawienie czcionki, echo = FALSE}
+#font_add_google("Lato", "lato")
+#showtext_auto()
+#theme_void(base_family = "Lato")
+```
+
+DO PROJEKTU: Musimy wziąć 153 kolumny z których wyliczyć średnią i z tych średnich musimy zbudować macierz 9x17 i to jest wejście do analizy - projekt bazuje  na uśrednionych wynikach pełniących role liczebności, trzeba ją pokazać tę tablicę i wykorzystać m.in. do analizy wstępnej. to bedzie baza do analizy korespondencji
+
+# Analiza korespondencji
+
+Wyliczono średnie ze 153 kolumn zawierających oceny cech polityków i zbudowano z nich macierz średnich.
+
+```{r Import danych}
+macierzSrednich <- read_excel("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Macierz srednich.xlsx", range = "A1:J18")
+```
+
+```{r Zmiana na data frame}
+macierzSrednich <- data.frame(macierzSrednich)
+```
+
+```{r}
+rownames(macierzSrednich) <- macierzSrednich$cechy
+```
+
+```{r}
+macierzSrednich <- macierzSrednich[,-1]
+```
+
+```{r}
+macierzSrednich_matrix <- as.matrix(macierzSrednich)
+```
+
+Czy ma znaczenie, czy będzie to macierz 9x17 czy 17x9?
+
+## Profile
+
+* Sumy brzegowe
+
+```{r Sumy brzegowe}
+sumy_brzegowe <- round(addmargins(macierzSrednich_matrix), 2)
+sumy_brzegowe
+```
+
+```{r Zapis do excel sumy brzegowe}
+sumy_brz_df <- as.data.frame(sumy_brzegowe) |>
+  rownames_to_column(var = "cecha")
+
+write_xlsx(sumy_brz_df, path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Tabelki do projektu/AK/sumy_brzegowe.xlsx")
+```
+
+* Udziały i sumy względne
+
+```{r Udzialy wzgledne}
+udzialy_wzgledne <- prop.table(macierzSrednich_matrix)
+udzialy_wzgledne
+```
+
+```{r Sumy wzgledne}
+sumy_wzgledne <- round(addmargins(udzialy_wzgledne), 4)
+sumy_wzgledne
+```
+
+```{r Zapis do excel sumy i udzialy wzg}
+udzialy_i_sumy_wzg_df <- as.data.frame(sumy_wzgledne) |>
+  rownames_to_column(var = "cecha")
+
+write_xlsx(udzialy_i_sumy_wzg_df, path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Tabelki do projektu/AK/udzialy_i_sumy_wzgledne.xlsx")
+```
+
+* Profil wierszowy względny
+
+```{r Profil wierszowy wzg}
+profil_wierszowy_wzg <- prop.table(macierzSrednich_matrix, margin = 1)
+profil_wierszowy_wzg
+```
+
+```{r Profil wierszowy wzg - suma}
+profil_wierszowy_wzg_suma <- round(addmargins(profil_wierszowy_wzg,
+                                              margin = 2,
+                                              FUN = sum), 3)
+profil_wierszowy_wzg_suma
+```
+
+```{r Zapis do excel profile i sumy wzg wier}
+profil_i_sumy_wier_wzg_df <- as.data.frame(profil_wierszowy_wzg_suma) |>
+  rownames_to_column(var = "cecha")
+
+write_xlsx(profil_i_sumy_wier_wzg_df, path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Tabelki do projektu/AK/profil_i_sumy_wier_wzgledne.xlsx")
+```
+
+* Profil kolumnowy względny
+
+```{r Profil kolumnowy wzg}
+profil_kolumnowy_wzg <- prop.table(macierzSrednich_matrix, margin = 2)
+profil_kolumnowy_wzg
+```
+
+```{r Profil kolumnowy wzg - suma}
+profil_kolumnowy_wzg_suma <- round(addmargins(profil_kolumnowy_wzg,
+                                              margin = 1,
+                                              FUN = sum), 3)
+profil_kolumnowy_wzg_suma
+```
+
+```{r Zapis do excel profile i sumy wzg kol}
+profil_i_sumy_kol_wzg_df <- as.data.frame(profil_kolumnowy_wzg_suma) |>
+  rownames_to_column(var = "cecha")
+
+write_xlsx(profil_i_sumy_kol_wzg_df, path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Tabelki do projektu/AK/profil_i_sumy_kol_wzgledne.xlsx")
+```
+
+## Statystyka chi-kwadrat
+
+```{r Statystyka chi-kwadrat}
+chi <- chisq.test(macierzSrednich)
+chi    # chi-kwadrat, może być z poprawką na ciągłość Yatesa
+```
+
+```{r}
+chi$expected
+```
+
+*nie wiem co tu*
+
+```{r}
+TschuprowT(macierzSrednich)
+```
+
+```{r}
+ContCoef(macierzSrednich)
+```
+
+```{r}
+CramerV(macierzSrednich)
+```
+
+```{r}
+C <- ContCoef(macierzSrednich)
+```
+
+Jeżeli liczba wierszy jest różna od liczby kolumn (w != k)
+
+```{r}
+w = 17
+k = 9
+```
+
+```{r}
+Cmax <- ((sqrt((k-1)/k)) + (sqrt((w-1)/w)))/2
+Cmax
+```
+
+```{r}
+Ckor = C/Cmax
+Ckor
+```
+
+## Wartości osobliwe
+
+```{r}
+korespondencja <- ca(macierzSrednich, graph = FALSE)
+korespondencja
+```
+
+
+
+```{r}
+korespondencja$sv
+```
+
+```{r}
+plot(korespondencja)
+```
+
+*to chyba ten sam wykres co będzie trochę niżej, a tamten jest ładniejszy*
+
+```{r}
+ev <- get_eigenvalue(korespondencja)
+ev
+```
+
+```{r}
+inercja <- sum(ev[,1])
+inercja
+```
+
+```{r}
+fviz_screeplot(korespondencja, 
+               addlabels = TRUE, 
+               ylim = c(0, 60),
+               ylab = "Procent bezwładności",
+               xlab = "Liczba wymiarów",
+               main = "Wykres osypiska",
+               barfill = "#ed1c24",
+               barcolor = "#ed1c24",
+               ggtheme = theme_grey()
+               )
+
+ggsave(
+  filename = "osypisko_koresp.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AK",
+  limitsize = FALSE,
+  width = 6.604,
+  height = 4.604,
+  dpi = 600,
+  bg = "transparent"
+)
+```
+
+### Wierszowe
+
+```{r}
+row <- get_ca_row(korespondencja)
+row
+```
+
+* masy wierszowe, częstości brzegowe wierszy, średni profil kolumnowy
+
+```{r}
+korespondencja$rowmass            
+```
+
+* współrzędne wariantów cechy 1 (wiersze)
+
+```{r}
+row$coord                
+```
+
+* cos2 dla wszystkich wymiarów
+
+```{r}
+row$cos2                 
+```
+
+* jakość dla dwóch wymiarów
+
+```{r}
+rowSums(row$cos2[,1:2])  
+```
+
+* bezwładność po wymiarach, suma = 1
+
+```{r}
+row$contrib              
+```
+
+* inercja dla wariantów cechy 1 (wiersze), wariancja
+
+```{r}
+row$inertia              
+```
+
+* względne bezwładność, inercja, suma = 100%
+
+```{r}
+(row$inertia/sum(row$inertia))*100
+```
+
+Masa może być traktowana jako informacja o randze ważności poszczególnych wierszy (kolumn).
+
+Jakość punktu -- im bliżej jedności są wartości, tym lepiej reprezentowany jest analizowany punkt. Mówi, czy punkty będą dobrze odwzorowane w zadanej przestrzeni.
+
+### Kolumnowe
+
+```{r}
+col <- get_ca_col(korespondencja)
+col
+```
+
+* masy kolumnowe, częstości brzegowe kolumn, średni profil wierszowy
+
+```{r}
+korespondencja$colmass            
+```
+
+* współrzędne wariantów cechy 2 (kolumny)
+
+```{r}
+col$coord                
+```
+
+* cos2 dla wszystkich wymiarów
+
+```{r}
+col$cos2                 
+```
+
+* jakość dla dwóch wymiarów
+
+```{r}
+rowSums(col$cos2[,1:2])  
+```
+
+* bezwładność po wymiarach, suma = 1
+
+```{r}
+col$contrib              
+```
+
+* inercja dla wariantów cechy 2 (kolumny), wariancja
+
+```{r}
+col$inertia              
+```
+
+* względne bezwładność, inercja, suma = 100%
+
+```{r}
+(col$inertia/sum(col$inertia))*100   
+```
+
+```{r Metryki wiersze}
+# Data frames dla każdej metryki (wiersze)
+df_row_mass <- as.data.frame(korespondencja$rowmass) # masa
+df_row_coord <- as.data.frame(row$coord) # współrzędne po wymiarach
+df_row_cos2 <- as.data.frame(row$cos2) # jakość po wymiarach
+df_row_quality <- as.data.frame(rowSums(row$cos2[, 1:2])) # łączna jakość dla dwóch wymiarów
+df_row_contrib <- as.data.frame(row$contrib) # bezwładność po wymiarach
+df_row_inertia <- as.data.frame(row$inertia) # inercja 
+df_relative_row_inertia <- as.data.frame((row$inertia / sum(row$inertia)) * 100) # względna bezwładność
+
+# Nazwa kolumny dla dataframe z jakością (wiersze)
+colnames(df_row_quality) <- "Quality_Dim1_Dim2"
+
+# Zapis do pliku Excel
+write_xlsx(list(
+  Row_Coord = df_row_coord,
+  Row_Cos2 = df_row_cos2,
+  Row_Contrib = df_row_contrib,
+  Relative_Row_Inertia = df_relative_row_inertia,
+  Row_Quality = df_row_quality,
+  Row_Mass = df_row_mass,
+  Row_Inertia = df_row_inertia
+), path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Tabelki do projektu/AK/AK_metryki_wierszowe.xlsx")
+```
+
+
+```{r Metryki kolumny}
+# Data frames dla każdej metryki (kolumny)
+df_col_mass <- as.data.frame(korespondencja$colmass) # masa
+df_col_coord <- as.data.frame(col$coord) # współrzędne po wymiarach
+df_col_cos2 <- as.data.frame(col$cos2) # jakość po wymiarach
+df_col_quality <- as.data.frame(rowSums(col$cos2[, 1:2])) # łączna jakość dla dwóch wymiarów
+df_col_contrib <- as.data.frame(col$contrib) # bezwładność po wymiarach
+df_col_inertia <- as.data.frame(col$inertia) # inercja 
+df_relative_col_inertia <- as.data.frame((col$inertia / sum(col$inertia)) * 100) # względna bezwładność
+
+# Nazwa kolumny dla dataframe z jakością (kolumny)
+colnames(df_col_quality) <- "Quality_Dim1_Dim2"
+
+# Zapis do pliku Excel
+write_xlsx(list(
+  Col_Coord = df_col_coord,
+  Col_Cos2 = df_col_cos2,
+  Col_Contrib = df_col_contrib,
+  Relative_Col_Inertia = df_relative_col_inertia,
+  Col_Quality = df_col_quality,
+  Col_Mass = df_col_mass,
+  Col_Inertia = df_col_inertia
+), path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Tabelki do projektu/AK/AK_metryki_kolumnowe.xlsx")
+```
+
+
+
+```{r Biplot z etykietami kolumn}
+fviz_ca_biplot(korespondencja,
+               col.row = "#051e2e",
+               col.col = "cos2",
+               gradient.cols = c("#fca3a7", "#ed1c24", "#4d060b"),
+               repel = TRUE,
+               labelsize = 2,
+               geom.row = "point",
+               ggtheme = theme_grey()
+               )
+
+ggsave(
+  filename = "biplot_etykiety_kolumn.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AK",
+  limitsize = FALSE,
+  width = 6.604,
+  height = 4.604,
+  dpi = 600,
+  bg = "transparent"
+)
+```
+
+```{r Biplot z etykietami wierszy}
+fviz_ca_biplot(korespondencja,
+               col.row = "#051e2e",
+               col.col = "cos2",
+               gradient.cols = c("#fca3a7", "#ed1c24", "#4d060b"),
+               repel = TRUE,
+               labelsize = 2,
+               geom.col = "point",
+               ggtheme = theme_grey()
+               )
+
+ggsave(
+  filename = "biplot_etykiety_wierszy.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AK",
+  limitsize = FALSE,
+  width = 6.604,
+  height = 4.604,
+  dpi = 600,
+  bg = "transparent"
+)
+```
+
+Najważniejsza rzecz: masa, jakość
+
+---
+
+Tego chyba nie dam do projektu, bo tak sobie wygląda
+
+Dane jako tablica
+
+```{r}
+macierzSrednich_table <- as.table(macierzSrednich_matrix)
+```
+
+```{r}
+balloonplot(macierzSrednich_table,
+            main = "",
+            xlab = "",
+            ylab = "",
+            label = TRUE,
+            show.margins = FALSE
+            )
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

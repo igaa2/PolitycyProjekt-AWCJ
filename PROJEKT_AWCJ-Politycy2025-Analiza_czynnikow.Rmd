@@ -1,0 +1,641 @@
+---
+title: "Projekt AWCJ - Politycy 2025 - Analiza czynnikowa"
+author: "Iga Bochniak"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+Analiza dotyczy pytania 2. z kwestionariusza.
+
+```{r Sciezka, echo = FALSE}
+setwd("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT")
+```
+
+```{r Pakiety, echo = FALSE, message = FALSE, warning = FALSE}
+pacman::p_load(tidyverse, # ładowanie m.in. ggplot2, dplyr, forcats; tworzenie kodów z operatorem pipe %>% 
+               corrplot, # wykres korelacji (korelogram)
+               ggcorrplot, # wykres korelacji z ggplot
+               psych, # narzędzia statystyczne (testy, wiarygodność testów, analizy) 
+               EnvStats, # narzędzia statystyczne (skewness) 
+               laeken, # gini (do obliczenia statystyk opisowych) 
+               gridExtra, # łączenie wykresów
+               lattice, # wykresy kratowe
+               readxl, # wczytywanie danych z Excel     
+               RColorBrewer, # palety z kolorami
+               DescTools, # narzędzia statystyczne
+               car, # testy statystyczne, analiza reszt, wykrywanie outliers'ów 
+               vcd, # wizualizacja danych kategorycznych
+               reshape2, # przekształcanie formatu danych 
+               gplots, # nie wymaga konwersji danych za pomocą reshape2 jak ggplot2 
+               seriation, # ustalanie optymalnej kolejności elementów
+               BiocManager,
+               jaccard,
+               vegan, # funkcja vegdist
+               proxy,
+               tidyverse,
+               factoextra,
+               pheatmap,
+               plot.matrix,
+               png,
+               cluster,
+               dendextend,
+               showtext,
+               sysfonts,
+               tibble,
+               stringr
+               )
+```
+
+```{r Ustawienie czcionki, echo = FALSE, message = FALSE, warning = FALSE}
+#font_add_google("Lato", "lato")
+#showtext_auto()
+#theme_void(base_family = "Lato")
+```
+
+# Zbiór danych
+
+```{r Import danych}
+rawData <- read_excel("C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/BAZA POLITYCY 2025.xlsx", )
+```
+
+```{r Zmiana na data frame}
+rawData <- data.frame(rawData[,-1]) # usunięcie pierwszej kolumny, bo R dodaje swoją
+```
+
+# Analiza czynników
+
+Tworzymy osobny podzbiór danych, w którym zmiennymi będą 24 pytania z drugiej części kwestionariusza.
+
+```{r Zbior z pytaniami}
+rawData_pytania <- rawData %>%
+  select(starts_with("X"))
+```
+
+Nie można wejść do analizy czynników bez sprawdzenia korelacji (czy cechy wykazują pewne powiązania) - macierz 24 x 24.
+
+Mamy skalę Likerta, więc policzymy korelację Spearmana. 
+
+```{r Korelacja Spearmana - analiza czynnikowa v1}
+spearman_czyn_v1 <- round(cor(rawData_pytania, method = c("spearman")), 2)
+```
+
+```{r KorelogramFull, echo = FALSE, warning = FALSE}
+ggcorrplot(
+  corr = spearman_czyn_v1,
+  method = "square",
+  type = "full",
+  ggtheme = ggplot2::theme_gray,
+  lab = TRUE,
+  digits = 1
+)
+
+ggsave(
+  filename = "korelogramFull_rawData_pytania.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AC",
+  limitsize = FALSE,
+  width = 16.604,
+  height = 8.271,
+  dpi = 400,
+  bg = "transparent"
+)
+```
+
+Większość współczynników wykazuje powiązania. Jest potencjał na sukces analizy, chociaż są cechy, których wkład nie jest aż tak wysoki. Najsłabiej korelują z pozostałymi stwierdzenia 14 i 15, czyli odpowiednio:
+
+* Uczestnictwo w wyborach pełnoletniego obywatela powinno być obowiązkowe.
+* W Polsce młodzi ludzie mają realny wpływ na politykę. 
+
+Utworzono też macierz korelacji pogrupowaną za pomocą funkcji hclust (służy do hierarchicznego grupowania (klastrowania) danych; działa na podstawie macierzy odległości i tworzy strukturę drzewa, która pokazuje relacje między punktami danych).
+
+```{r KorelogramUpperOrder, echo = FALSE, warning = FALSE}
+ggcorrplot(
+  corr = spearman_czyn_v1,
+  method = "square",
+  type = "upper",
+  ggtheme = ggplot2::theme_gray,
+  lab = TRUE,
+  digits = 1,
+  hc.order = TRUE
+)
+
+ggsave(
+  filename = "korelogramUpperOrder_rawData_pytania.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AC",
+  limitsize = FALSE,
+  width = 16.604,
+  height = 8.271,
+  dpi = 400,
+  bg = "transparent"
+)
+```
+
+Można na tej podstawie podejrzewać, które pytania będą tworzyły jeden czynnik.
+
+Warto dodać do projektu: korelację cząstkową (pokazała tylko na zdjęciach)
+
+---
+
+## Test Bartletta
+
+```{r}
+cortest.bartlett(rawData_pytania)
+```
+
+H0: brak związków
+
+p-value małe, odrzucamy H0 tzn. że mówimy, że między cechami istnieją istotne związki (korelacje), przy założeniu że była to próba losowa (my nie mamy próby losowej, więc bardziej jako ciekawostka można użyć)
+
+```{r}
+KMO(rawData_pytania)
+```
+Wysoka wartość KMO równa 0.83 świadczy o zasadności stosowania analizy czynnikowej w ocenie związków między zmiennymi obserwowalnymi.
+
+Wartości MSA dla każdego pytania przekraczają poziom 0.60, więc nie ma konieczności usuwania do dalszej analizy żadnej z nich. Można jednak zauważyć, że najniższą wartość przyjmuje on w przypadku pytań wybranych wcześniej jako najmniej skorelowane z pozostałymi (X14 oraz X15).
+
+---
+
+## Metody ustalania liczby czynników
+
+### Ustalanie liczby czynników stosując Very Simple Structure (vss) Analysis
+
+```{r}
+vss(rawData_pytania)
+```
+
+Metoda zasugerowała trzy czynniki.
+
+### Ustalanie liczby czynników metodą Parallel Analysis
+
+```{r}
+fa.parallel(rawData_pytania)
+```
+
+Tej chyba nie warto dawać do projektu?
+
+PEARSONA TEŻ NIE BO KORELACJA MA BYĆ SPEARMANA
+
+**Metoda principal axis + Pearson**
+
+* wersja zwykła
+
+```{r Metoda principal axis - Pearson, echo = FALSE, warning = FALSE}
+fa.parallel(rawData_pytania,
+            fa = "fa",
+            fm = "pa",
+            main = "Scree plot") # metoda principal axis
+
+abline(h = 1, col = "green", lwd = 2, lty = 2) # macierz danych, Pearson
+```
+
+* wersja ggplot
+
+```{r Metoda principal axis - Pearson - ggplot, echo = FALSE, warning = FALSE}
+parallel_result_pe_pa <- fa.parallel(rawData_pytania, 
+                                     fa = "fa", 
+                                     fm = "pa", 
+                                     plot = FALSE)
+
+# Ramka danych do ggplot2 w formacie long
+eigen_data <- data.frame(
+  liczba_czynnikow = 1:length(parallel_result_pe_pa$fa.values),
+  Rzeczywiste = parallel_result_pe_pa$fa.values,
+  Symulowane = parallel_result_pe_pa$fa.sim
+) %>%
+  pivot_longer(cols = c("Rzeczywiste", "Symulowane"),
+               names_to = "Typ",
+               values_to = "Wartosc")
+
+# Wykres z legendą
+ggplot(eigen_data, aes(x = liczba_czynnikow, y = Wartosc, color = Typ, linetype = Typ)) +
+  geom_line(size = 0.5) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 1, color = "black", linetype = "dashed", size = 0.5, show.legend = TRUE) +
+  scale_color_manual(values = c("Rzeczywiste" = "#0b416c", "Symulowane" = "#ed1c24")) +
+  scale_linetype_manual(values = c("Rzeczywiste" = "solid", "Symulowane" = "dashed")) +
+  labs(
+    title = "Wykres osypiska (metoda principal axis + Pearson)",
+    x = "Liczba czynników",
+    y = "Wartości własne",
+    color = "Typ danych",
+    linetype = "Typ danych"
+  ) +
+  theme_gray(base_size = 14)
+```
+
+**Metoda największej wiarygodności + Pearson**
+
+* wersja zwykła
+
+```{r MNW - Pearson, echo = FALSE, warning = FALSE}
+fa.parallel(rawData_pytania,
+            fa = "fa",
+            fm = "ml",
+            main = "Scree plot") # metoda największej wiarygodności
+
+abline(h = 1, col = "green", lwd = 2, lty = 2) # macierz danych, Pearson
+```
+
+* wersja ggplot
+
+```{r MNNW Pearson - ggplot, echo = FALSE, warning = FALSE}
+parallel_result_pe_ml <- fa.parallel(rawData_pytania, 
+                                     fa = "fa", 
+                                     fm = "ml", 
+                                     plot = FALSE)
+
+# Ramka danych do ggplot2 w formacie long
+eigen_data <- data.frame(
+  liczba_czynnikow = 1:length(parallel_result_pe_ml$fa.values),
+  Rzeczywiste = parallel_result_pe_ml$fa.values,
+  Symulowane = parallel_result_pe_ml$fa.sim
+) %>%
+  pivot_longer(cols = c("Rzeczywiste", "Symulowane"),
+               names_to = "Typ",
+               values_to = "Wartosc")
+
+# Wykres z legendą
+ggplot(eigen_data, aes(x = liczba_czynnikow, y = Wartosc, color = Typ, linetype = Typ)) +
+  geom_line(size = 0.5) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 1, color = "black", linetype = "dashed", size = 0.5, show.legend = TRUE) +
+  scale_color_manual(values = c("Rzeczywiste" = "#0b416c", "Symulowane" = "#ed1c24")) +
+  scale_linetype_manual(values = c("Rzeczywiste" = "solid", "Symulowane" = "dashed")) +
+  labs(
+    title = "Wykres osypiska (MNW + Pearson)",
+    x = "Liczba czynników",
+    y = "Wartości własne",
+    color = "Typ danych",
+    linetype = "Typ danych"
+  ) +
+  theme_gray(base_size = 14)
+
+ggsave(
+  filename = "parallel_pe_ml.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AC",
+  limitsize = FALSE,
+  width = 6.604,
+  height = 4.604,
+  dpi = 600,
+  bg = "transparent"
+)
+```
+
+**Metoda principal axis + Spearman**
+
+* wersja zwykła
+
+```{r Metoda principal axis - Spearman, echo = FALSE, warning = FALSE}
+fa.parallel(spearman_czyn_v1,
+            n.obs = nrow(rawData_pytania),
+            fa = "fa",
+            fm = "pa",
+            main = "Scree plot") # metoda principal axis
+
+abline(h = 1, col = "green", lwd = 2, lty = 2) # macierz danych, Spearman
+```
+
+* wersja ggplot
+
+```{r Metoda principal axis - Spearman - ggplot, echo = FALSE, warning = FALSE}
+parallel_result_sp_pa <- fa.parallel(spearman_czyn_v1,
+                                     n.obs = nrow(rawData_pytania),
+                                     fa = "fa", 
+                                     fm = "pa",
+                                     plot = FALSE)
+
+# Ramka danych do ggplot2 w formacie long
+eigen_data <- data.frame(
+  liczba_czynnikow = 1:length(parallel_result_sp_pa$fa.values),
+  Rzeczywiste = parallel_result_sp_pa$fa.values,
+  Symulowane = parallel_result_sp_pa$fa.sim
+) %>%
+  pivot_longer(cols = c("Rzeczywiste", "Symulowane"),
+               names_to = "Typ",
+               values_to = "Wartosc")
+
+# Wykres z legendą
+ggplot(eigen_data, aes(x = liczba_czynnikow, y = Wartosc, color = Typ, linetype = Typ)) +
+  geom_line(size = 0.5) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 1, color = "black", linetype = "dashed", size = 0.5, show.legend = TRUE) +
+  scale_color_manual(values = c("Rzeczywiste" = "#0b416c", "Symulowane" = "#ed1c24")) +
+  scale_linetype_manual(values = c("Rzeczywiste" = "solid", "Symulowane" = "dashed")) +
+  labs(
+    title = "Wykres osypiska (metoda principal axis + Spearman)",
+    x = "Liczba czynników",
+    y = "Wartości własne",
+    color = "Typ danych",
+    linetype = "Typ danych"
+  ) +
+  theme_gray(base_size = 14)
+
+ggsave(
+  filename = "parallel_sp_pa.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AC",
+  limitsize = FALSE,
+  width = 6.604,
+  height = 4.604,
+  dpi = 600,
+  bg = "transparent"
+)
+```
+
+**Metoda minres + Spearman**
+
+* wersja zwykła
+
+```{r Metoda minres - Spearman, echo = FALSE, warning = FALSE}
+fa.parallel(spearman_czyn_v1,
+            n.obs = nrow(rawData_pytania),
+            fa = "fa",
+            fm = "minres",
+            main = "Scree plot") # metoda minres
+
+abline(h = 1, col = "green", lwd = 2, lty = 2) # macierz danych, Spearman
+```
+
+* wersja ggplot
+
+```{r Metoda minres - Spearman - ggplot, echo = FALSE, warning = FALSE}
+parallel_result_sp_mi <- fa.parallel(spearman_czyn_v1,
+                                     n.obs = nrow(rawData_pytania),
+                                     fa = "fa", 
+                                     fm = "minres",
+                                     plot = FALSE)
+
+# Ramka danych do ggplot2 w formacie long
+eigen_data <- data.frame(
+  liczba_czynnikow = 1:length(parallel_result_sp_mi$fa.values),
+  Rzeczywiste = parallel_result_sp_mi$fa.values,
+  Symulowane = parallel_result_sp_mi$fa.sim
+) %>%
+  pivot_longer(cols = c("Rzeczywiste", "Symulowane"),
+               names_to = "Typ",
+               values_to = "Wartosc")
+
+# Wykres z legendą
+ggplot(eigen_data, aes(x = liczba_czynnikow, y = Wartosc, color = Typ, linetype = Typ)) +
+  geom_line(size = 0.5) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 1, color = "black", linetype = "dashed", size = 0.5, show.legend = TRUE) +
+  scale_color_manual(values = c("Rzeczywiste" = "#0b416c", "Symulowane" = "#ed1c24")) +
+  scale_linetype_manual(values = c("Rzeczywiste" = "solid", "Symulowane" = "dashed")) +
+  labs(
+    title = "Wykres osypiska (metoda minres + Spearman)",
+    x = "Liczba czynników",
+    y = "Wartości własne",
+    color = "Typ danych",
+    linetype = "Typ danych"
+  ) +
+  theme_gray(base_size = 14)
+
+ggsave(
+  filename = "parallel_sp_mi.png",
+  path = "C:/Users/Iga/OneDrive/Studia - materiały/# Informatyka i Ekonometria/0.2 SEMESTR II/Analiza wielowymiarowa cech jakościowych/Laboratoria/PROJEKT/Grafika/Wykresy z R/AC",
+  limitsize = FALSE,
+  width = 6.604,
+  height = 4.604,
+  dpi = 600,
+  bg = "transparent"
+)
+```
+
+
+# Analiza głównych składowych (PCA)
+
+Metoda bazująca na macierzy korelacji Spearmana
+
+* 0 -- algorytm bez rotacji
+
+```{r}
+pc0 <- principal(spearman_czyn_v1, 24, rotate = "none")  # nfactors = 24 bo mamy 24 pytania
+```
+
+```{r}
+pc0
+```
+
+
+Nie chce w projekcie tej tabelki + maks 5 czynników.
+
+* 1 -- algorytm bez rotacji ale 5 czynników (a może wziąć jednak mniej?)
+
+Metody bez rotacji ładują wszystko na 1 czynnik. Cechy słabo skorelowane z pozostałymi tworzą własny czynnik.
+
+```{r}
+pc1 <- principal(spearman_czyn_v1, 5, rotate = "none")
+```
+
+```{r}
+pc1
+```
+
+`com` mówi, czy cecha się ładuje na jeden czynnik czy się rozkłada na dwa czynniki. Czym mniejsza wartość, tym bardziej stabilizuje się w jednym.
+
+```{r}
+fa.diagram(pc1)
+```
+
+* 2 -- algorytm z rotacją
+
+`varimax` -- podejście zakłada, że nie ma korelacji między czynnikami.
+`ukośna` -- dopuszcza istnienie związków między czynnikami
+
+```{r}
+pc2 <- principal(spearman_czyn_v1, 5, rotate = "varimax")
+```
+
+```{r}
+pc2
+```
+
+```{r}
+fa.diagram(pc2)
+```
+
+* 3 
+
+```{r}
+pc3 <- principal(spearman_czyn_v1, 5, rotate = "oblimin")
+```
+
+```{r}
+pc3
+```
+
+```{r}
+fa.diagram(pc3)
+```
+
+
+```{r}
+pca <- prcomp(rawData_pytania, scale = TRUE)
+```
+
+```{r}
+fviz_pca_biplot(pca)
+```
+
+U nas nie będzie takiego biplotu (będziemy mieli 455 punktów i 24 osie).
+
+# Metoda największej wiarygodności
+
+```{r}
+ml0 <- fa(spearman_czyn_v1, 5, rotate = "none", fm = "ml")
+ml0
+```
+
+```{r}
+fa.diagram(ml0)
+```
+
+```{r}
+ml1 <- fa(spearman_czyn_v1, 5, rotate = "varimax", fm = "ml")
+ml1
+```
+
+```{r}
+fa.diagram(ml1)
+```
+
+```{r}
+ml2 <- fa(spearman_czyn_v1, 5, rotate = "quartimax", fm = "ml")
+ml2
+```
+
+```{r}
+fa.diagram(ml2)
+```
+
+```{r}
+ml3 <- fa(spearman_czyn_v1, 5, rotate = "equamax", fm = "ml")
+ml3
+```
+
+```{r}
+fa.diagram(ml3)
+```
+
+Rotacje ukośne: simplimax, promax, oblimin.
+
+```{r}
+ml4 <- fa(spearman_czyn_v1, 5, rotate = "simplimax", fm = "ml")
+ml4
+```
+
+```{r}
+fa.diagram(ml4)
+```
+
+```{r}
+ml6 <- fa(spearman_czyn_v1, 5, rotate = "promax", fm = "ml")
+ml6
+```
+
+```{r}
+fa.diagram(ml6)
+```
+
+```{r}
+ml7 <- fa(spearman_czyn_v1, 5, rotate = "oblimin", fm = "ml")
+ml7
+```
+
+```{r}
+fa.diagram(ml7)
+```
+
+# Metoda minres (minimum residual)
+
+```{r}
+mm0 <- fa(spearman_czyn_v1, nfactors = 5, fm = "minres", rotate = "none")
+mm0
+```
+
+```{r}
+fa.diagram(mm0)
+```
+
+```{r}
+mm1 <- fa(spearman_czyn_v1, nfactors = 5, fm = "minres", rotate = "varimax")
+mm1
+```
+
+```{r}
+fa.diagram(mm1)
+```
+
+My z grupy tych wyników wybierzemy do projektu jedno. Zazwyczaj powinny dać te same wnioski.
+
+```{r}
+mm2 <- fa(spearman_czyn_v1, nfactors = 5, fm = "minres", rotate = "quartimax")
+mm2
+```
+
+```{r}
+fa.diagram(mm2)
+```
+
+```{r}
+mm3 <- fa(spearman_czyn_v1, nfactors = 5, fm = "minres", rotate = "equamax")
+mm3
+```
+
+```{r}
+fa.diagram(mm3)
+```
+
+Czerwona kreska to korelacja ujemna.
+
+```{r}
+mm4 <- fa(spearman_czyn_v1, nfactors = 5, fm = "minres", rotate = "oblimin")
+mm4
+```
+
+```{r}
+fa.diagram(mm4)
+```
+
+```{r}
+print(fa(spearman_czyn_v1, 5, fm = "minres", rotate = "varimax")$loadings, cut = 0.5)
+```
+
+Pokazać w projekcie wszystkie metody, ale wybrać ostatecznie jedną.
+
+# Metoda osi głównych (principal axis)
+
+```{r}
+pa0 <- fa(spearman_czyn_v1, nfactors = 5, fm = "pa", rotate = "none")
+pa0
+```
+
+```{r}
+fa.diagram(pa0)
+```
+
+```{r}
+pa1 <- fa(spearman_czyn_v1, nfactors = 5, fm = "pa", rotate = "varimax")
+pa1
+```
+
+```{r}
+fa.diagram(pa1)
+```
+
+```{r}
+pa2 <- fa(spearman_czyn_v1, nfactors = 5, fm = "pa", rotate = "promax")
+pa2
+```
+
+```{r}
+fa.diagram(pa2)
+```
+
+
+# Test alfa Cronbacha
+
+ZAKŁADA ISTNIENIE TYLKO ZWIĄZKÓW DODATNICH.
+
+
+
+
